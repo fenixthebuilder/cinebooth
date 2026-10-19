@@ -1,0 +1,132 @@
+// Prisma schema for the CineBooth API
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+// Prisma client generator and database datasource configuration
+datasource db {
+  provider = "postgresql"
+}
+// Enum definitions for room roles, room statuses, and invite statuses
+enum RoomRole {
+  HOST
+  MODERATOR
+  MEMBER
+}
+
+enum RoomStatus {
+  WAITING
+  ACTIVE
+  ENDED
+}
+
+enum InviteStatus {
+  ACTIVE
+  REVOKED
+}
+// Model definitions for instances, users, sessions, rooms, room members, and room invites
+model Instance {
+  id        String   @id @default(uuid())
+  domain    String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+
+  @@map("instances")
+}
+// User model representing registered users within an instance
+model User {
+  id           String   @id @default(uuid())
+  instanceId   String
+  username     String
+  email        String   @unique
+  passwordHash String
+  displayName  String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  instance    Instance     @relation(fields: [instanceId], references: [id])
+  sessions    Session[]
+  hostedRooms Room[]       @relation("RoomHost")
+  memberships RoomMember[]
+  invites     RoomInvite[] @relation("InviteCreator")
+
+  @@unique([instanceId, username])
+  @@index([instanceId])
+  @@map("users")
+}
+
+// Session model representing user sessions for authentication
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// Room model representing chat or collaboration rooms
+model Room {
+  id        String     @id @default(uuid())
+  name      String
+  hostId    String
+  status    RoomStatus @default(WAITING)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  endedAt   DateTime?
+
+  host    User         @relation("RoomHost", fields: [hostId], references: [id])
+  members RoomMember[]
+  invites RoomInvite[]
+
+  @@index([hostId])
+  @@index([status])
+  @@map("rooms")
+}
+
+// RoomMember model representing the membership of a user in a room
+model RoomMember {
+  id       String   @id @default(uuid())
+  roomId   String
+  userId   String
+  role     RoomRole @default(MEMBER)
+  joinedAt DateTime @default(now())
+  leftAt   DateTime?
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+  @@map("room_members")
+}
+
+// RoomInvite model representing invitations to join a room
+model RoomInvite {
+  id          String       @id @default(uuid())
+  roomId      String
+  createdById String
+  tokenHash   String       @unique
+  status      InviteStatus @default(ACTIVE)
+  expiresAt   DateTime
+  maxUses     Int?
+  useCount    Int          @default(0)
+  createdAt   DateTime     @default(now())
+
+  room      Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  createdBy User @relation("InviteCreator", fields: [createdById], references: [id])
+
+  @@index([roomId])
+  @@index([expiresAt])
+  @@map("room_invites")
+}

@@ -12,6 +12,8 @@ import {
   hashToken,
   requireAuth,
   SESSION_COOKIE,
+  clearSessionCookie,
+  sessionCookieOptions,
 } from "../middleware/requireAuth.js";
 
 import {
@@ -278,7 +280,32 @@ authRouter.post("/logout", requireAuth, async (req, res, next) => {
       },
     });
 
-    res.clearCookie(SESSION_COOKIE, cookieOptions);
+    clearSessionCookie(res);
+
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// LOGOUT FROM ALL DEVICES
+authRouter.post("/logout-all", requireAuth, async (_req, res, next) => {
+  try {
+    const { userId } = res.locals.auth;
+
+    // Revoke every active session belonging to the authenticated user.
+    await prisma.session.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    // Remove the current browser's authentication cookie.
+    clearSessionCookie(res);
 
     res.status(204).send();
   } catch (error) {
